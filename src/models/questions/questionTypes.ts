@@ -1,0 +1,1 @@
+export type QuestionTypes = 'true_or_false' | 'multiple_choice'

@@ -1,0 +1,5 @@
+
+const HTTP_REQUEST_INTERVAL = 60000 // 60,000 ms = 1 min
+const HTTP_REQUEST_LIMIT = 1  // 10 request
+
+export {HTTP_REQUEST_INTERVAL , HTTP_REQUEST_LIMIT}
