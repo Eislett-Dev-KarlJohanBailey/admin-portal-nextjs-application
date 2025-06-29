@@ -68,6 +68,7 @@ const initialState = {
 
   // For create form
   questionFormData: {
+    id: undefined,
     title: "",
     description: "",
     content: "",
@@ -80,7 +81,8 @@ const initialState = {
       { id: "2", content: "", isCorrect: false },
       { id: "3", content: "", isCorrect: false },
       { id: "4", content: "", isCorrect: false }
-    ]
+    ],
+    isTrue: undefined
   },
   subtopicsToLink: [] as string[]
 
@@ -149,9 +151,7 @@ export const QuestionPageSlice = createSlice({
     },
 
     setAllQuestionFormSubtopics: (state: QuestionPageSliceState, action: PayloadAction<string[]>) => {
-      console.log('setAllQuestionFormSubtopics called with:', action.payload);
       state.subtopicsToLink = action.payload ?? [];
-      console.log('subtopicsToLink after update:', state.subtopicsToLink);
     },
 
 
@@ -191,9 +191,10 @@ export const getQuestionTableDeleteData = (state: RootState) => state.QuestionPa
 export const getQuestionsIsLoading = (state: RootState) => state.QuestionPageSlice.isLoading;
 export const getQuestionFormIsLoading = (state: RootState) => state.QuestionPageSlice.isLoadingFormData;
 
-export const getQuestionFormData = (state: RootState) => state.QuestionPageSlice.questionFormData as QuestionDetails;
+export const getQuestionFormData = (state: RootState) => {
+  return state.QuestionPageSlice.questionFormData;
+};
+
 export const getQuestionFormSubtopics = (state: RootState) => {
-  const subtopics = state.QuestionPageSlice.subtopicsToLink;
-  console.log('Store selector getQuestionFormSubtopics returning:', subtopics);
-  return subtopics;
+  return state.QuestionPageSlice.subtopicsToLink;
 };

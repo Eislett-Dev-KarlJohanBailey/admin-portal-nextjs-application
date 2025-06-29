@@ -1,4 +1,3 @@
-
 export enum QuestionType {
   MULTIPLE_CHOICE = "multiple_choice",
   TRUE_FALSE = "true_or_false"
@@ -35,4 +34,5 @@ export interface QuestionFormData {
   difficultyLevel: number
   // subtopicId: string
   multipleChoiceOptions: QuestionOption[]
+  isTrue?: boolean
 }

@@ -59,11 +59,6 @@ export default function UpdateQuestionPage() {
   const questionSubtopics = useAppSelector(getQuestionFormSubtopics);
   const isLoading = useAppSelector(getQuestionFormIsLoading);
 
-  // Debug logging for subtopics
-  useEffect(() => {
-    console.log('Current questionSubtopics:', questionSubtopics);
-  }, [questionSubtopics]);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [subtopics, setSubtopics] = useState<SubTopicDetails[]>([]);
   const [currentTag, setCurrentTag] = useState("");
@@ -76,12 +71,8 @@ export default function UpdateQuestionPage() {
 
   // Initialize subtopicId from URL query
   useEffect(() => {
-    // if (router.isReady && router.query.subtopic) {
-    //   dispatch(
-    //     setQuestionFormSubtopics({ operation_type: 'ADD', value: Number(router.query.subtopic) })
-    //   )
-    // }
     if (router.isReady && router.query.questionId) {
+      console.log("Setting question ID from router:", router.query.questionId);
       dispatch(
         setQuestionFormData({
           field: "id",
@@ -93,80 +84,91 @@ export default function UpdateQuestionPage() {
     dispatch,
     router.isReady,
     router.query.questionId,
-    router.query.subtopic,
   ]);
 
+  // Cleanup effect to reset form data when questionId changes
   useEffect(() => {
-    // Get Question info by id
-    console.log("Fetching questions");
-    async function getQuestion() {
-      dispatch(setQuestionFormIsLoading(true));
-      let links = []; // existing subtopic links
-      const results = await handleFetchQuestionById(
-        authContext?.token,
-        formData?.id as string
-      );
+    return () => {
+      console.log("Cleaning up form data");
+      dispatch(resetQuestionPageSlice());
+    };
+  }, [dispatch, router.query.questionId]);
 
-      if ((results as { error: string })?.error) {
+  useEffect(() => {
+    async function getQuestion() {
+      if (!formData?.id) {
+        console.log("No formData.id found, skipping question fetch");
+        return;
+      }
+      
+      dispatch(setQuestionFormIsLoading(true));
+      let links = [];
+      
+      try {
+        const results = await handleFetchQuestionById(
+          authContext?.token,
+          formData?.id as string
+        );
+
+        if ((results as { error: string })?.error) {
+          toast({
+            title: (results as { error: string })?.error,
+            style: { background: "red", color: "white" },
+            duration: 3500,
+          });
+        } else {
+          const questionData = results as QuestionDetails;
+          console.log('Fetched question data:', questionData);
+          
+          // Populate form with data
+          const data: QuestionFormData = {
+            id: formData?.id || router.query.questionId as string,
+            title: questionData?.title || "",
+            content: questionData?.content || "",
+            description: questionData?.description || "",
+            tags: questionData?.tags || [],
+            totalPotentialMarks: questionData?.totalPotentialMarks || 1,
+            difficultyLevel: questionData?.difficultyLevel || 0.1,
+            type: questionData?.type === 'true_or_false' ? QuestionType.TRUE_FALSE : QuestionType.MULTIPLE_CHOICE,
+            multipleChoiceOptions: [],
+            isTrue: questionData?.isTrue || false
+          };
+
+          // Handle multiple choice options only for multiple choice questions
+          if (questionData?.type !== "true_or_false") {
+            const newOptions = questionData?.multipleChoiceOptions?.map(
+              (option, index) => ({
+                id: option.id || (index + 1).toString(),
+                content: option.content,
+                isCorrect: option.isCorrect,
+              })
+            ) || [];
+            data.multipleChoiceOptions = newOptions;
+          }
+          
+          links = questionData?.subTopics?.map((el) => el.id) || [];
+
+          console.log('Processed question data:', data);
+          console.log('Existing subtopic links:', links);
+          
+          dispatch(setAllQuestionFormData(data));
+          dispatch(setAllQuestionFormSubtopics(links));
+          setExistingSubtopicLinks(links);
+        }
+      } catch (error) {
+        console.error('Error fetching question:', error);
         toast({
-          title: (results as { error: string })?.error,
+          title: "Failed to fetch question",
           style: { background: "red", color: "white" },
           duration: 3500,
         });
-        // dispatch(resetQuestionPageSlice());
-      } else {
-        // Populate form with data
-        // console.log('Question details', results)
-        const data = {
-          id: formData.id,
-          title: (results as QuestionDetails)?.title,
-          content: (results as QuestionDetails)?.content,
-          description: (results as QuestionDetails)?.description,
-          tags: (results as QuestionDetails)?.tags,
-          totalPotentialMarks: (results as QuestionDetails)
-            ?.totalPotentialMarks,
-          difficultyLevel: (results as QuestionDetails)?.difficultyLevel,
-          type: (results as QuestionDetails)?.type,
-        };
-
-        let newOptions = [];
-
-        if (data.type === QuestionType.TRUE_FALSE) {
-          newOptions = [
-            {
-              id: "1",
-              content: "True",
-              isCorrect: (results as QuestionDetails).isTrue,
-            },
-            {
-              id: "2",
-              content: "False",
-              isCorrect: !(results as QuestionDetails).isTrue,
-            },
-          ];
-        } else if (data.type === QuestionType.MULTIPLE_CHOICE) {
-          newOptions =
-            (results as QuestionDetails)?.multipleChoiceOptions ??
-            (results as any)?.options ??
-            [];
-        }
-        data["multipleChoiceOptions"] = newOptions;
-        links = (results as QuestionDetails)?.subTopics?.map((el) => el.id) || [];
-
-        console.log('Question data', data);
-        console.log('Existing subtopic links:', links);
-        dispatch(setAllQuestionFormData(data as any));
-        
-        // Set the subtopics immediately when question data is loaded
-        dispatch(setAllQuestionFormSubtopics(links));
+      } finally {
+        dispatch(setQuestionFormIsLoading(false));
       }
-
-      dispatch(setQuestionFormIsLoading(false));
-      setExistingSubtopicLinks(links);
     }
 
     if (formData.id) getQuestion();
-  }, [authContext?.token, dispatch, formData.id]);
+  }, [authContext?.token, dispatch, formData.id, router.query.questionId]);
 
   //  GET LIST OF SUB TOPICS
   useEffect(() => {
@@ -197,7 +199,6 @@ export default function UpdateQuestionPage() {
   // Update form data
   const handleInputChange = useCallback(
     (field: keyof QuestionFormData, value: any) => {
-      // setFormData(prev => ({ ...prev, [field]: value }))
       dispatch(setQuestionFormData({ field, value }));
     },
     [dispatch]
@@ -206,54 +207,60 @@ export default function UpdateQuestionPage() {
   // Handle question type change
   const handleTypeChange = useCallback(
     (type: QuestionType) => {
-      let newOptions = formData.multipleChoiceOptions;
-
       if (type === QuestionType.TRUE_FALSE) {
-        newOptions = [
-          { id: "1", content: "True", isCorrect: false },
-          { id: "2", content: "False", isCorrect: false },
-        ];
-      } else if (
-        type === QuestionType.MULTIPLE_CHOICE &&
-        formData.multipleChoiceOptions.length < 3
-      ) {
-        newOptions = [
+        // For true/false, we don't need multiple choice options
+        dispatch(setQuestionFormData({ field: "type", value: type }));
+        dispatch(
+          setQuestionFormData({
+            field: "multipleChoiceOptions",
+            value: [],
+          })
+        );
+      } else if (type === QuestionType.MULTIPLE_CHOICE) {
+        // For multiple choice, initialize with 4 empty options
+        const newOptions = [
           { id: "1", content: "", isCorrect: false },
           { id: "2", content: "", isCorrect: false },
           { id: "3", content: "", isCorrect: false },
           { id: "4", content: "", isCorrect: false },
         ];
+        
+        dispatch(setQuestionFormData({ field: "type", value: type }));
+        dispatch(
+          setQuestionFormData({
+            field: "multipleChoiceOptions",
+            value: newOptions,
+          })
+        );
       }
+    },
+    [dispatch]
+  );
 
-      // setFormData(prev => ({
-      //   ...prev,
-      //   type,
-      //   multipleChoiceOptions: newOptions
-      // }))
-      dispatch(setQuestionFormData({ field: "type", value: type }));
+  // Handle true/false toggle
+  const handleTrueFalseToggle = useCallback(
+    (isTrue: boolean) => {
       dispatch(
         setQuestionFormData({
-          field: "multipleChoiceOptions",
-          value: newOptions,
+          field: "isTrue",
+          value: isTrue,
         })
       );
     },
-    [dispatch, formData.multipleChoiceOptions]
+    [dispatch]
   );
 
   // Handle option content change
   const handleOptionChange = useCallback(
     (id: string, content: string) => {
-      // setFormData(prev => ({
-      //   ...prev,
-      //   multipleChoiceOptions: prev.multipleChoiceOptions.map(option =>
-      //     option.id === id ? { ...option, content } : option
-      //   )
-      // }))
-
-      const newOptions = formData.multipleChoiceOptions.map((option) =>
+      console.log('handleOptionChange called:', { id, content });
+      
+      const currentOptions = formData.multipleChoiceOptions || [];
+      const newOptions = currentOptions.map((option) =>
         option.id === id ? { ...option, content } : option
       );
+
+      console.log('New options after update:', newOptions);
 
       dispatch(
         setQuestionFormData({
@@ -268,9 +275,14 @@ export default function UpdateQuestionPage() {
   // Handle correct option selection
   const handleCorrectOptionChange = useCallback(
     (id: string) => {
-      const newOptions = formData.multipleChoiceOptions.map((option) =>
+      console.log('handleCorrectOptionChange called:', { id });
+      
+      const currentOptions = formData.multipleChoiceOptions || [];
+      const newOptions = currentOptions.map((option) =>
         option.id === id ? { ...option, isCorrect: !option.isCorrect } : option
       );
+
+      console.log('New options after update:', newOptions);
 
       dispatch(
         setQuestionFormData({
@@ -285,14 +297,18 @@ export default function UpdateQuestionPage() {
   // Add a new option (for multiple choice)
   const handleAddOption = useCallback(() => {
     if (formData.type === QuestionType.MULTIPLE_CHOICE) {
+      const currentOptions = formData.multipleChoiceOptions || [];
+      const newId = String(Math.max(...currentOptions.map(o => parseInt(o.id) || 0), 0) + 1);
+      
       const newOptions = [
-        ...formData.multipleChoiceOptions,
+        ...currentOptions,
         {
-          id: String((formData.multipleChoiceOptions?.length ?? 0) + 1),
+          id: newId,
           content: "",
           isCorrect: false,
         },
       ];
+      
       dispatch(
         setQuestionFormData({
           field: "multipleChoiceOptions",
@@ -309,12 +325,14 @@ export default function UpdateQuestionPage() {
         formData.type === QuestionType.MULTIPLE_CHOICE &&
         formData.multipleChoiceOptions.length > 2
       ) {
+        const currentOptions = formData.multipleChoiceOptions || [];
+        
         // Check if we're removing the correct option
-        const isRemovingCorrect = formData.multipleChoiceOptions.find(
+        const isRemovingCorrect = currentOptions.find(
           (o) => o.id === id
         )?.isCorrect;
 
-        let newOptions = formData.multipleChoiceOptions.filter(
+        let newOptions = currentOptions.filter(
           (option) => option.id !== id
         );
 
@@ -389,78 +407,58 @@ export default function UpdateQuestionPage() {
     [handleAddTag]
   );
 
-  // Handle linking question to sub topic
-  const handleLinkSubtopics = useCallback(
+  // Simplified subtopic linking logic
+  const handleSubtopicsUpdate = useCallback(
     async (questionId: string) => {
-      if (questionSubtopics.length === 0) return true;
-      let linkSuccess = true;
-
       try {
-        for (let subtopicId of questionSubtopics.filter(
-          (subtopic) => !existingSubtopicLinks.includes(subtopic)
-        )) {
-          const rawResponse = await fetch(
-            `/api/sub-topics/${subtopicId}/question/${questionId}`,
-            {
-              method: "POST",
-              headers: {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-              },
+        // Get current subtopics from store
+        const currentSubtopics = questionSubtopics || [];
+        
+        // Remove old links that are no longer needed
+        for (const oldSubtopicId of existingSubtopicLinks) {
+          if (!currentSubtopics.includes(oldSubtopicId)) {
+            const response = await fetch(
+              `/api/sub-topics/${oldSubtopicId}/question/${questionId}`,
+              {
+                method: "DELETE",
+                headers: {
+                  Accept: "application/json",
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+            
+            if (!response.ok) {
+              console.error(`Failed to unlink subtopic ${oldSubtopicId}`);
             }
-          );
-
-          if (!rawResponse.ok) {
-            linkSuccess = false;
-            break;
-          } else if (rawResponse.ok && subtopicId === questionSubtopics[-1])
-            linkSuccess = true;
+          }
         }
-      } catch (e) {
-        linkSuccess = false;
-        console.log("Question Link err: ", e);
-        // displayErrorMessage('Failed to link question to selected subtopics')
-      }
-
-      return linkSuccess;
-    },
-    [existingSubtopicLinks, questionSubtopics]
-  );
-
-  // Handle linking question to sub topic
-  const handleUnLinkingSubtopics = useCallback(
-    async (questionId: string) => {
-      if (existingSubtopicLinks.length === 0) return true;
-      let unLinkSuccess = true;
-
-      try {
-        for (let subtopicId of existingSubtopicLinks.filter(
-          (subtopic) => !questionSubtopics.includes(subtopic)
-        )) {
-          const rawResponse = await fetch(
-            `/api/sub-topics/${subtopicId}/question/${questionId}`,
-            {
-              method: "DELETE",
-              headers: {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-              },
+        
+        // Add new links
+        for (const newSubtopicId of currentSubtopics) {
+          if (!existingSubtopicLinks.includes(newSubtopicId)) {
+            const response = await fetch(
+              `/api/sub-topics/${newSubtopicId}/question/${questionId}`,
+              {
+                method: "POST",
+                headers: {
+                  Accept: "application/json",
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+            
+            if (!response.ok) {
+              console.error(`Failed to link subtopic ${newSubtopicId}`);
             }
-          );
-
-          if (!rawResponse.ok) {
-            unLinkSuccess = false;
-            break;
-          } else if (rawResponse.ok && subtopicId === questionSubtopics[-1])
-            unLinkSuccess = true;
+          }
         }
-      } catch (e) {
-        unLinkSuccess = false;
-        console.log("Question Link err: ", e);
-        // displayErrorMessage('Failed to link question to selected subtopics')
+        
+        return true;
+      } catch (error) {
+        console.error("Error updating subtopic links:", error);
+        return false;
       }
-
-      return unLinkSuccess;
     },
     [existingSubtopicLinks, questionSubtopics]
   );
@@ -472,22 +470,19 @@ export default function UpdateQuestionPage() {
       console.log('Form submission started');
       console.log('Form data:', formData);
       console.log('Question subtopics at submission:', questionSubtopics);
-      console.log('Existing subtopic links at submission:', existingSubtopicLinks);
       
-      // Validation
+      // Basic validation
       if (!formData.id) {
-        // alert("Please enter a title")
         displayErrorMessage("Missing question id", "No question id found");
         return;
       }
+      
       if (!formData.title.trim()) {
-        // alert("Please enter a title")
         displayErrorMessage("Missing required fields", "Please enter a title");
         return;
       }
 
       if (!formData.content.trim()) {
-        // alert("Please enter question content")
         displayErrorMessage(
           "Missing required fields",
           "Please enter question content"
@@ -495,13 +490,10 @@ export default function UpdateQuestionPage() {
         return;
       }
 
-      // Check if we have subtopics either in store or in existing links
+      // Check if we have subtopics
       const hasSubtopics = questionSubtopics?.length > 0 || existingSubtopicLinks.length > 0;
       
       if (!hasSubtopics) {
-        console.log('Validation failed: no subtopics found');
-        console.log('Question subtopics:', questionSubtopics);
-        console.log('Existing subtopic links:', existingSubtopicLinks);
         displayErrorMessage(
           "Missing required fields",
           "Please select and add a subtopic"
@@ -515,71 +507,60 @@ export default function UpdateQuestionPage() {
         dispatch(setAllQuestionFormSubtopics(existingSubtopicLinks));
       }
 
-      // Check if both 'true' & 'false' is selected option is marked as correct
-      if (
-        formData.type === QuestionType.TRUE_FALSE &&
-        formData.multipleChoiceOptions.filter((option) => option.isCorrect)
-          ?.length === 2
-      ) {
-        // alert("Please mark at least one option as correct")
-        displayErrorMessage(
-          "Invalid Options",
-          "For question type 'true or false', the answer must be either true or false."
-        );
-        return;
-      }
+      // Validate options based on question type
+      if (formData.type === QuestionType.TRUE_FALSE) {
+        // For true/false, isTrue should be defined
+        if (formData.isTrue === undefined) {
+          displayErrorMessage(
+            "Missing required fields",
+            "Please select the correct answer (True or False)"
+          );
+          return;
+        }
+      } else {
+        // For multiple choice, validate options
+        if (!formData.multipleChoiceOptions.some((option) => option.isCorrect)) {
+          displayErrorMessage(
+            "Missing required fields",
+            "Please mark at least one option as correct"
+          );
+          return;
+        }
 
-      // Check if at least one option is marked as correct
-      if (!formData.multipleChoiceOptions.some((option) => option.isCorrect)) {
-        // alert("Please mark at least one option as correct")
-        displayErrorMessage(
-          "Missing required fields",
-          "Please mark at least one option as correct"
-        );
-        return;
-      }
-
-      // Check if all options have content
-      if (
-        formData.multipleChoiceOptions.some((option) => !option.content.trim())
-      ) {
-        // alert("Please fill in all options")
-        displayErrorMessage(
-          "Missing required fields",
-          "Please fill in all options"
-        );
-        return;
+        if (formData.multipleChoiceOptions.some((option) => !option.content.trim())) {
+          displayErrorMessage(
+            "Missing required fields",
+            "Please fill in all options"
+          );
+          return;
+        }
       }
 
       setIsSubmitting(true);
 
       try {
-        const isTrue =
-          formData?.type === QuestionType.MULTIPLE_CHOICE
-            ? undefined
-            : formData?.multipleChoiceOptions.find(
-                (el) => el?.content?.toLowerCase() === "true"
-              ).isCorrect;
+        // Prepare the update payload
+        const questionDetails = {
+          title: formData?.title,
+          content: formData?.content,
+          description: formData?.description,
+          tags: formData?.tags,
+          totalPotentialMarks: formData?.totalPotentialMarks,
+          difficultyLevel: formData?.difficultyLevel,
+          type: formData?.type,
+          multipleChoiceOptions:
+            formData?.type === QuestionType.MULTIPLE_CHOICE
+              ? formData?.multipleChoiceOptions
+              : null,
+          isTrue: formData?.type === QuestionType.TRUE_FALSE ? formData?.isTrue : undefined,
+        };
 
-        let params = {
-          questionDetails: {
-            title: formData?.title,
-            content: formData?.content,
-            description: formData?.description,
-            tags: formData?.tags,
-            totalPotentialMarks: formData?.totalPotentialMarks,
-            difficultyLevel: formData?.difficultyLevel,
-            type: formData?.type,
-            multipleChoiceOptions:
-              formData?.type === QuestionType.MULTIPLE_CHOICE
-                ? formData?.multipleChoiceOptions
-                : null,
-            isTrue: isTrue,
-          },
+        const params = {
+          questionDetails: removeNulls(questionDetails),
           id: formData.id,
         };
 
-        params = removeNulls(params) as any;
+        console.log('Sending update request with params:', params);
 
         const rawResponse = await fetch("/api/questions", {
           method: "PUT",
@@ -591,54 +572,44 @@ export default function UpdateQuestionPage() {
           body: JSON.stringify(params),
         });
         
-        // Check if the request was successful (200 for update)
         if (!rawResponse.ok) {
           const errorData = await rawResponse.json();
           throw new Error(errorData.error || 'Failed to update question');
         }
         
         const data: QuestionDetails = await rawResponse.json();
+        console.log('Question updated successfully:', data);
 
-        let linkedAllSubtopics = true;
-        let unlinkSuccessful = true;
-        // if created successfully link question to subtopic
-        if (data?.id) {
-          linkedAllSubtopics = await handleLinkSubtopics(data.id);
+        // Update subtopic links
+        const subtopicsUpdated = await handleSubtopicsUpdate(data.id);
+        
+        if (!subtopicsUpdated) {
+          displayErrorMessage("Warning", "Question updated but failed to update some subtopic links");
+        } else {
+          displaySuccessMessage("Question Updated Successfully!");
         }
-        if (data?.id) {
-          unlinkSuccessful = await handleUnLinkingSubtopics(data.id);
-        }
-
-        if (!linkedAllSubtopics || !unlinkSuccessful)
-          displayErrorMessage("Failed to Link questions");
-        else {
-          dispatch(resetQuestionPageSlice());
-          displaySuccessMessage("Question Updated!");
-          setTimeout(
-            () => router.push("/admin/topics/subtopics/questions"),
-            1500
-          );
-        }
-      } catch (e) {
-        console.log("On Submit Error", e);
-        displayErrorMessage("Failed to submit!");
+        
+        // Reset form and redirect
+        dispatch(resetQuestionPageSlice());
+        setTimeout(
+          () => router.push("/admin/topics/subtopics/questions"),
+          1500
+        );
+        
+      } catch (error) {
+        console.error("Update error:", error);
+        displayErrorMessage("Failed to update question", error.message);
+      } finally {
+        setIsSubmitting(false);
       }
     },
     [
       authContext.token,
       dispatch,
-      formData.content,
-      formData?.description,
-      formData?.difficultyLevel,
-      formData.id,
-      formData.multipleChoiceOptions,
-      formData?.tags,
-      formData.title,
-      formData?.totalPotentialMarks,
-      formData.type,
-      handleLinkSubtopics,
-      handleUnLinkingSubtopics,
-      questionSubtopics?.length,
+      formData,
+      handleSubtopicsUpdate,
+      questionSubtopics,
+      existingSubtopicLinks,
       router,
     ]
   );
@@ -721,44 +692,6 @@ export default function UpdateQuestionPage() {
                   required
                 />
               </div>
-
-              {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="subtopic">Subtopic</Label>
-                  <Select 
-                    value={formData.subTopics?.length === 0 ? `${formData.subTopics[0]}` : undefined } 
-                    onValueChange={(value) => handleInputChange("subtopicId", Number(value))}
-                  >
-                    <SelectTrigger id="subtopic">
-                      <SelectValue placeholder="Select a subtopic" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subtopics.map((subtopic) => (
-                        <SelectItem key={subtopic.id} value={subtopic.id}>
-                          {subtopic.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="type">Question Type</Label>
-                  <Select 
-                    value={formData.type} 
-                    onValueChange={(value) => handleTypeChange(value as QuestionType)}
-                  >
-                    <SelectTrigger id="type">
-                      <SelectValue placeholder="Select question type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={QuestionType.MULTIPLE_CHOICE}>Multiple Choice</SelectItem>
-                      <SelectItem value={QuestionType.TRUE_FALSE}>True/False</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div> 
-              */}
 
               <div className="space-y-2">
                 <Label htmlFor="type">Question Type</Label>
@@ -983,28 +916,36 @@ export default function UpdateQuestionPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {formData.multipleChoiceOptions.map((option) => (
-                    <div
-                      key={option.id}
-                      className="flex items-center space-x-4"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={option.isCorrect}
-                          onCheckedChange={() =>
-                            handleCorrectOptionChange(option.id)
-                          }
-                          aria-label="Correct answer"
-                        />
-                        <Label
-                          className="text-base cursor-pointer"
-                          onClick={() => handleCorrectOptionChange(option.id)}
-                        >
-                          {option.content}
-                        </Label>
-                      </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        checked={formData.isTrue === true}
+                        onCheckedChange={(checked) => handleTrueFalseToggle(checked)}
+                        aria-label="True answer"
+                      />
+                      <Label
+                        className="text-base cursor-pointer"
+                        onClick={() => handleTrueFalseToggle(true)}
+                      >
+                        True
+                      </Label>
                     </div>
-                  ))}
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        checked={formData.isTrue === false}
+                        onCheckedChange={(checked) => handleTrueFalseToggle(!checked)}
+                        aria-label="False answer"
+                      />
+                      <Label
+                        className="text-base cursor-pointer"
+                        onClick={() => handleTrueFalseToggle(false)}
+                      >
+                        False
+                      </Label>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -1036,24 +977,44 @@ export default function UpdateQuestionPage() {
                     </div>
 
                     <div className="space-y-2">
-                      {formData.multipleChoiceOptions.map((option, index) => (
-                        <div
-                          key={option.id}
-                          className="flex items-center space-x-2"
-                        >
-                          {formData.type === QuestionType.MULTIPLE_CHOICE ? (
+                      {formData.type === QuestionType.MULTIPLE_CHOICE ? (
+                        formData.multipleChoiceOptions.map((option, index) => (
+                          <div
+                            key={option.id}
+                            className="flex items-center space-x-2"
+                          >
                             <div className="flex items-center justify-center h-6 w-6 rounded-full bg-muted text-sm font-medium">
                               {String.fromCharCode(65 + index)}
                             </div>
-                          ) : null}
-                          <MarkdownRenderer
-                            content={
-                              option.content ||
-                              `Option ${index + 1} will appear here`
-                            }
-                          />
+                            <MarkdownRenderer
+                              content={
+                                option.content ||
+                                `Option ${index + 1} will appear here`
+                              }
+                            />
+                          </div>
+                        ))
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <div className="flex items-center justify-center h-6 w-6 rounded-full bg-muted text-sm font-medium">
+                              A
+                            </div>
+                            <span>True</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="flex items-center justify-center h-6 w-6 rounded-full bg-muted text-sm font-medium">
+                              B
+                            </div>
+                            <span>False</span>
+                          </div>
+                          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                            <span className="text-sm font-medium text-green-800">
+                              Correct Answer: {formData.isTrue === true ? "True" : formData.isTrue === false ? "False" : "Not set"}
+                            </span>
+                          </div>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 </TabsContent>
