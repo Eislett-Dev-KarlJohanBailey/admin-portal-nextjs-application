@@ -4,7 +4,7 @@ import { DataManagementLayout } from "@/components/layout/DataManagementLayout";
 import { DataTable } from "@/components/data/DataTable";
 import { DeleteConfirmationDialog } from "@/components/data/DeleteConfirmationDialog";
 import { Button } from "@/components/ui/button";
-import { Edit, Eye, MoreHorizontal, Trash } from "lucide-react";
+import { Edit, Eye, MoreHorizontal, Trash, Copy } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +44,8 @@ import {
   setQuestionSubtopics,
   setQuestionTableDeleteData,
   setQuestionTableFilters,
+  setAllQuestionFormData,
+  setAllQuestionFormSubtopics,
 } from "@/store/questions.slice";
 import { DEFAULT_PAGE_NUMBER } from "@/constants/tablePageSizes";
 import {
@@ -355,6 +357,53 @@ export default function QuestionsPage() {
     [router]
   );
 
+  const handleDuplicate = useCallback(
+    (question: QuestionDetails) => {
+      console.log('Duplicating question:', question);
+      
+      // Convert QuestionDetails to QuestionFormData format
+      const formData = {
+        id: undefined, // Remove the ID for new question
+        title: `${question.title} (Copy)`,
+        description: question.description || "",
+        content: question.content,
+        tags: question.tags || [],
+        type: question.type as QuestionType, // Convert QuestionTypes to QuestionType
+        totalPotentialMarks: question.totalPotentialMarks,
+        difficultyLevel: question.difficultyLevel,
+        multipleChoiceOptions: question.multipleChoiceOptions?.map(option => ({
+          id: option.id || Math.random().toString(),
+          content: option.content,
+          isCorrect: option.isCorrect
+        })) || [
+          { id: "1", content: "", isCorrect: false },
+          { id: "2", content: "", isCorrect: false },
+          { id: "3", content: "", isCorrect: false },
+          { id: "4", content: "", isCorrect: false }
+        ],
+        isTrue: question.isTrue
+      };
+
+      // Set the form data in Redux store
+      dispatch(setAllQuestionFormData(formData));
+      console.log('Form data set:', formData);
+
+      // Set the subtopics to link (if any)
+      if (question.subTopics && question.subTopics.length > 0) {
+        const subtopicIds = question.subTopics.map(subtopic => subtopic.id);
+        dispatch(setAllQuestionFormSubtopics(subtopicIds));
+        console.log('Subtopic IDs set:', subtopicIds);
+      }
+
+      // Show success message
+      displaySuccessMessage("Question Duplicated", "Question data has been copied to the create form");
+      
+      // Navigate to create page
+      router.push("/admin/topics/subtopics/questions/create");
+    },
+    [dispatch, router]
+  );
+
   const handleSearch = useDebouncedCallback((value: string) => {
     dispatch(setQuestionReqParams({ title: value, page_number: 1 })); // triggers apply filter
   }, 1000);
@@ -619,6 +668,10 @@ export default function QuestionsPage() {
                   <Edit className="mr-2 h-4 w-4" />
                   Edit
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDuplicate(question)}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Duplicate
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => handleDeleteClick(question.id)}
@@ -633,7 +686,7 @@ export default function QuestionsPage() {
         ),
       },
     ],
-    [getSubtopicName, handleDeleteClick, handleEdit, handleViewQuestion]
+    [getSubtopicName, handleDeleteClick, handleEdit, handleViewQuestion, handleDuplicate]
   );
 
   const sortOptions = useMemo(
