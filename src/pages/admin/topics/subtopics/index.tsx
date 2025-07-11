@@ -272,7 +272,7 @@ export default function SubtopicsPage() {
   ]
   
   const columns = [
-    { id: "id", header: "ID", cell: (subtopic: SubTopicDetails) => <span className="text-muted-foreground text-sm">{subtopic.id}</span>, sortable: true },
+    { id: "order", header: "Order", cell: (subtopic: SubTopicDetails) => <span className="text-muted-foreground text-sm">{subtopic.order || "N/A"}</span>, sortable: true },
     { id: "name", header: "Subtopic Name", cell: (subtopic: SubTopicDetails) => <span className="font-medium">{subtopic.name}</span>, sortable: true },
     { id: "topic", header: "Topic", cell: (subtopic: SubTopicDetails) => <span>{getTopicName(subtopic.topicId)}</span>, sortable: true },
     { id: "description", header: "Description", cell: (subtopic: SubTopicDetails) => <span className="truncate block max-w-[300px]">{subtopic.description}</span>, sortable: false },
@@ -312,8 +312,8 @@ export default function SubtopicsPage() {
     { label: "Name (Z-A)", value: "name_desc" },
     { label: "Topic (A-Z)", value: "topic_asc" },
     { label: "Topic (Z-A)", value: "topic_desc" },
-    { label: "ID (Ascending)", value: "id_asc" },
-    { label: "ID (Descending)", value: "id_desc" },
+    { label: "Order (Ascending)", value: "order_asc" },
+    { label: "Order (Descending)", value: "order_desc" },
     { label: "Newest First", value: "createdAt_desc" },
     { label: "Oldest First", value: "createdAt_asc" }
   ]
