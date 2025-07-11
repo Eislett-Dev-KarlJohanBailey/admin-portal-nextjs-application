@@ -1,12 +1,11 @@
-import { SubTopicHintDetails } from "./subTopicHintDetails"
+import { SubTopicDetails } from "./subTopicDetails"
 
 export interface SubTopicResponse {
-  data: {
-    id?: string
-    name: string
-    description: string
-    hints: SubTopicHintDetails[]
-    progress: number
-  }[]
+  data: SubTopicDetails[]
   amount: number
+  pagination: {
+    page_size: number
+    page_number: number
+    total_pages: number
+  }
 }

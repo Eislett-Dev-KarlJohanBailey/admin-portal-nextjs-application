@@ -1,5 +1,5 @@
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useContext } from "react"
 import { AdminLayout } from "@/components/layout/AdminLayout"
 import { DataManagementLayout } from "@/components/layout/DataManagementLayout"
 import { DataTable } from "@/components/data/DataTable"
@@ -26,15 +26,12 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select"
-
-// Subtopic data type
-interface Subtopic {
-  id: string
-  name: string
-  description: string
-  topicId: string
-  createdAt: string
-}
+import { useAuth } from "@/contexts/AuthContext"
+import { handleFetchSubTopics } from "@/services/subtopics/subTopicsRequest"
+import { handleFetchTopic } from "@/services/topics/topicsRequest"
+import { SubTopicDetails } from "@/models/subTopic/subTopicDetails"
+import { TopicDetails } from "@/services/topics/topicsRequest"
+import { DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE } from "@/constants/tablePageSizes"
 
 // Subtopic form type
 interface SubtopicFormData {
@@ -45,130 +42,26 @@ interface SubtopicFormData {
   createdAt?: string
 }
 
-// Mock data for demonstration
-const MOCK_TOPICS = [
-  { 
-    id: "1", 
-    name: "Limits and Continuity", 
-    description: "Introduction to the concept of limits and continuity in calculus",
-    courseId: "1",
-    createdAt: "2025-01-15"
-  },
-  { 
-    id: "2", 
-    name: "Newton's Laws of Motion", 
-    description: "Fundamental principles governing the motion of objects",
-    courseId: "2",
-    createdAt: "2025-02-10"
-  },
-  { 
-    id: "3", 
-    name: "Hamlet Analysis", 
-    description: "In-depth analysis of Shakespeare's Hamlet",
-    courseId: "3",
-    createdAt: "2025-03-05"
-  },
-  { 
-    id: "4", 
-    name: "D-Day Invasion", 
-    description: "Study of the Allied invasion of Normandy",
-    courseId: "4",
-    createdAt: "2025-01-20"
-  },
-  { 
-    id: "5", 
-    name: "Binary Trees", 
-    description: "Implementation and applications of binary trees",
-    courseId: "5",
-    createdAt: "2025-02-25"
-  }
-]
-
-const MOCK_SUBTOPICS: Subtopic[] = [
-  { 
-    id: "1", 
-    name: "Epsilon-Delta Definition", 
-    description: "Formal definition of limits using epsilon-delta notation",
-    topicId: "1",
-    createdAt: "2025-01-16"
-  },
-  { 
-    id: "2", 
-    name: "Limit Laws", 
-    description: "Properties and rules for calculating limits",
-    topicId: "1",
-    createdAt: "2025-01-17"
-  },
-  { 
-    id: "3", 
-    name: "First Law of Motion", 
-    description: "An object at rest stays at rest, and an object in motion stays in motion",
-    topicId: "2",
-    createdAt: "2025-02-11"
-  },
-  { 
-    id: "4", 
-    name: "Second Law of Motion", 
-    description: "Force equals mass times acceleration (F = ma)",
-    topicId: "2",
-    createdAt: "2025-02-12"
-  },
-  { 
-    id: "5", 
-    name: "Character Analysis", 
-    description: "In-depth study of Hamlet's character and motivations",
-    topicId: "3",
-    createdAt: "2025-03-06"
-  },
-  { 
-    id: "6", 
-    name: "Themes and Motifs", 
-    description: "Recurring themes and literary devices in Hamlet",
-    topicId: "3",
-    createdAt: "2025-03-07"
-  },
-  { 
-    id: "7", 
-    name: "Planning and Preparation", 
-    description: "Allied planning and preparation for the D-Day invasion",
-    topicId: "4",
-    createdAt: "2025-01-21"
-  },
-  { 
-    id: "8", 
-    name: "Execution and Aftermath", 
-    description: "The execution of the D-Day invasion and its aftermath",
-    topicId: "4",
-    createdAt: "2025-01-22"
-  },
-  { 
-    id: "9", 
-    name: "Tree Traversal", 
-    description: "Methods for visiting all nodes in a binary tree",
-    topicId: "5",
-    createdAt: "2025-02-26"
-  },
-  { 
-    id: "10", 
-    name: "Balanced Trees", 
-    description: "Techniques for maintaining balanced binary trees",
-    topicId: "5",
-    createdAt: "2025-02-27"
-  }
-]
-
-
 export default function SubtopicsPage() {
   const router = useRouter()
-  const [subtopics, setSubtopics] = useState<Subtopic[]>(MOCK_SUBTOPICS)
-  const [filteredSubtopics, setFilteredSubtopics] = useState<Subtopic[]>(MOCK_SUBTOPICS)
-  const [topics, setTopics] = useState(MOCK_TOPICS) // This should be Topic[] if you define Topic interface
+  const authContext = useContext(useAuth())
+  const token = authContext?.token
+
+  // State for subtopics data
+  const [subtopics, setSubtopics] = useState<SubTopicDetails[]>([])
+  const [topics, setTopics] = useState<Map<string, TopicDetails>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE_NUMBER)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalAmount, setTotalAmount] = useState(0)
   
   // URL-synced state
   const [sortColumn, setSortColumn] = useState<string>("name")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
-  const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState("")
   const [topicFilter, setTopicFilter] = useState<string>("")
   
@@ -186,47 +79,56 @@ export default function SubtopicsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [subtopicToDelete, setSubtopicToDelete] = useState<string | null>(null)
-  
-  // Apply all filters, sorting, and pagination
-  const applyFilters = useCallback(() => {
-    setIsLoading(true)
-    
-    let result = [...subtopics]
-    
-    if (searchQuery) {
-      const lowerSearch = searchQuery.toLowerCase()
-      result = result.filter(subtopic => 
-        subtopic.name.toLowerCase().includes(lowerSearch) || 
-        subtopic.description.toLowerCase().includes(lowerSearch)
-      )
-    }
-    
-    if (topicFilter) {
-      result = result.filter(subtopic => subtopic.topicId === topicFilter)
-    }
-    
-    result.sort((a, b) => {
-      let comparison = 0
-      const valA = a[sortColumn as keyof Subtopic]
-      const valB = b[sortColumn as keyof Subtopic]
 
-      if (sortColumn === "topic") {
-        const topicA = topics.find(t => t.id === a.topicId)?.name || ""
-        const topicB = topics.find(t => t.id === b.topicId)?.name || ""
-        comparison = topicA.localeCompare(topicB)
-      } else if (typeof valA === "string" && typeof valB === "string") {
-        comparison = valA.localeCompare(valB)
-      } else if (typeof valA === "number" && typeof valB === "number") {
-        comparison = valA - valB
-      } else if (sortColumn === "createdAt") {
-        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  // Fetch subtopics from API
+  const fetchSubtopics = useCallback(async () => {
+    if (!token) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const result = await handleFetchSubTopics(token, currentPage, pageSize, topicFilter || undefined)
+      
+      if (result.error) {
+        setError(result.error)
+        return
       }
-      return sortDirection === "asc" ? comparison : -comparison
-    })
-    
-    setFilteredSubtopics(result)
-    setIsLoading(false)
-  }, [subtopics, searchQuery, topicFilter, sortColumn, sortDirection, topics])
+
+      if (result.data) {
+        setSubtopics(result.data)
+        setTotalAmount(result.amount || 0)
+        if (result.pagination) {
+          setTotalPages(result.pagination.total_pages)
+        }
+      }
+    } catch (err) {
+      setError('Failed to fetch subtopics')
+      console.error('Error fetching subtopics:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [token, currentPage, pageSize, topicFilter])
+
+  // Fetch topic details for a given topic ID
+  const fetchTopicDetails = useCallback(async (topicId: string) => {
+    if (!token || topics.has(topicId)) return
+
+    try {
+      const result = await handleFetchTopic(token, topicId)
+      if (result.data) {
+        setTopics(prev => new Map(prev).set(topicId, result.data))
+      }
+    } catch (err) {
+      console.error('Error fetching topic details:', err)
+    }
+  }, [token, topics])
+
+  // Fetch topic details for all subtopics
+  const fetchTopicDetailsForSubtopics = useCallback(async () => {
+    const uniqueTopicIds = [...new Set(subtopics.map(subtopic => subtopic.topicId))]
+    await Promise.all(uniqueTopicIds.map(topicId => fetchTopicDetails(topicId)))
+  }, [subtopics, fetchTopicDetails])
 
   // Initialize state from URL on first load
   useEffect(() => {
@@ -237,7 +139,7 @@ export default function SubtopicsPage() {
     if (sortColumnFromUrl) setSortColumn(sortColumnFromUrl)
     if (sortDirectionFromUrl && ["asc", "desc"].includes(sortDirectionFromUrl)) setSortDirection(sortDirectionFromUrl)
     
-    const pageFromUrl = router.query.page ? parseInt(router.query.page as string, 10) : 1
+    const pageFromUrl = router.query.page ? parseInt(router.query.page as string, 10) : DEFAULT_PAGE_NUMBER
     if (!isNaN(pageFromUrl)) setCurrentPage(pageFromUrl)
     
     const searchFromUrl = router.query.search as string
@@ -245,15 +147,18 @@ export default function SubtopicsPage() {
     
     const topicFilterFromUrl = router.query.topic as string
     if (topicFilterFromUrl) setTopicFilter(topicFilterFromUrl)
-    
-    applyFilters()
-  }, [router.isReady, router.query, applyFilters])
-  
-  // Apply filters whenever dependencies change
+  }, [router.isReady, router.query])
+
+  // Fetch subtopics when dependencies change
   useEffect(() => {
-    applyFilters()
-  }, [subtopics, searchQuery, topicFilter, sortColumn, sortDirection, applyFilters])
-  
+    fetchSubtopics()
+  }, [fetchSubtopics])
+
+  // Fetch topic details when subtopics change
+  useEffect(() => {
+    fetchTopicDetailsForSubtopics()
+  }, [fetchTopicDetailsForSubtopics])
+
   const handleFormChange = (field: keyof SubtopicFormData, value: string) => {
     setCurrentSubtopic(prev => ({ ...prev, [field]: value }))
   }
@@ -284,31 +189,11 @@ export default function SubtopicsPage() {
       return
     }
     
+    // TODO: Implement actual API calls for create/update
     setTimeout(() => {
-      if (isEditMode && currentSubtopic.id) {
-        const originalSubtopic = subtopics.find(s => s.id === currentSubtopic.id)
-        if (originalSubtopic) {
-          const updatedSubtopic: Subtopic = {
-            id: currentSubtopic.id,
-            name: currentSubtopic.name,
-            description: currentSubtopic.description,
-            topicId: currentSubtopic.topicId,
-            createdAt: originalSubtopic.createdAt
-          }
-          setSubtopics(prev => prev.map(s => (s.id === updatedSubtopic.id ? updatedSubtopic : s)))
-        }
-      } else {
-        const newSubtopic: Subtopic = {
-          name: currentSubtopic.name,
-          description: currentSubtopic.description,
-          topicId: currentSubtopic.topicId,
-          id: `${Date.now()}`, // Using timestamp for more unique ID
-          createdAt: new Date().toISOString().split("T")[0]
-        }
-        setSubtopics(prev => [...prev, newSubtopic])
-      }
       setIsSubmitting(false)
       setFormDrawerOpen(false)
+      fetchSubtopics() // Refresh data
     }, 1000)
   }
   
@@ -320,21 +205,24 @@ export default function SubtopicsPage() {
   const handleDeleteConfirm = () => {
     if (!subtopicToDelete) return
     setIsDeleting(true)
+    
+    // TODO: Implement actual API call for delete
     setTimeout(() => {
-      setSubtopics(subtopics.filter(subtopic => subtopic.id !== subtopicToDelete))
       setIsDeleting(false)
       setDeleteDialogOpen(false)
       setSubtopicToDelete(null)
+      fetchSubtopics() // Refresh data
     }, 1000)
   }
   
   const handleViewSubtopic = (id: string) => {
-    router.push(`/admin/topics/subtopics/${id}`)
+    router.push(`/admin/topics/subtopics/questions/${id}`)
   }
   
   const handleSearch = (value: string) => {
     setSearchQuery(value)
     setCurrentPage(1)
+    // TODO: Implement server-side search
   }
   
   const handleTopicFilterChange = (value: string) => {
@@ -342,35 +230,39 @@ export default function SubtopicsPage() {
     setCurrentPage(1)
     const query = { ...router.query, topic: value || undefined, page: "1" }
     if (!value) delete query.topic
-    router.push({ pathname: router.pathname, query }, undefined, { shallow: true })
+    router.push({ pathname: router.pathname, query })
   }
   
   const handleSort = (column: string, direction: "asc" | "desc") => {
     setSortColumn(column)
     setSortDirection(direction)
-    router.push({ pathname: router.pathname, query: { ...router.query, sortColumn: column, sortDirection: direction } }, undefined, { shallow: true })
+    router.push({ pathname: router.pathname, query: { ...router.query, sortColumn: column, sortDirection: direction } })
+    // TODO: Implement server-side sorting
   }
   
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    router.push({ pathname: router.pathname, query: { ...router.query, page: page.toString() } }, undefined, { shallow: true })
+    // Update URL without shallow routing to ensure proper navigation
+    router.push({ pathname: router.pathname, query: { ...router.query, page: page.toString() } })
   }
   
   const handleRefresh = () => {
-    setIsLoading(true)
-    setTimeout(() => {
-      applyFilters()
-      setIsLoading(false)
-    }, 500)
+    fetchSubtopics()
   }
   
-  const getPaginatedData = () => {
-    const itemsPerPage = 10
-    const startIndex = (currentPage - 1) * itemsPerPage
-    return filteredSubtopics.slice(startIndex, startIndex + itemsPerPage)
+  const getTopicName = (topicId: string) => {
+    const topic = topics.get(topicId)
+    return topic?.name || "N/A"
   }
-  
-  const getTopicName = (topicId: string) => topics.find(topic => topic.id === topicId)?.name || "Unknown"
+
+  // Get all available topics for the filter dropdown
+  const getAvailableTopics = () => {
+    const topicIds = [...new Set(subtopics.map(subtopic => subtopic.topicId))]
+    return topicIds.map(topicId => ({
+      id: topicId,
+      name: getTopicName(topicId)
+    })).filter(topic => topic.name !== "N/A")
+  }
   
   const filterOptions = [
     {
@@ -382,21 +274,21 @@ export default function SubtopicsPage() {
       placeholder: "Select topic",
       options: [
         { label: "All Topics", value: "" },
-        ...topics.map(topic => ({ label: topic.name, value: topic.id }))
+        ...getAvailableTopics().map(topic => ({ label: topic.name, value: topic.id }))
       ]
     }
   ]
   
   const columns = [
-    { id: "id", header: "ID", cell: (subtopic: Subtopic) => <span className="text-muted-foreground text-sm">{subtopic.id}</span>, sortable: true },
-    { id: "name", header: "Subtopic Name", cell: (subtopic: Subtopic) => <span className="font-medium">{subtopic.name}</span>, sortable: true },
-    { id: "topic", header: "Topic", cell: (subtopic: Subtopic) => <span>{getTopicName(subtopic.topicId)}</span>, sortable: true },
-    { id: "description", header: "Description", cell: (subtopic: Subtopic) => <span className="truncate block max-w-[300px]">{subtopic.description}</span>, sortable: false },
-    { id: "createdAt", header: "Created At", cell: (subtopic: Subtopic) => new Date(subtopic.createdAt).toLocaleDateString(), sortable: true },
+    { id: "id", header: "ID", cell: (subtopic: SubTopicDetails) => <span className="text-muted-foreground text-sm">{subtopic.id}</span>, sortable: true },
+    { id: "name", header: "Subtopic Name", cell: (subtopic: SubTopicDetails) => <span className="font-medium">{subtopic.name}</span>, sortable: true },
+    { id: "topic", header: "Topic", cell: (subtopic: SubTopicDetails) => <span>{getTopicName(subtopic.topicId)}</span>, sortable: true },
+    { id: "description", header: "Description", cell: (subtopic: SubTopicDetails) => <span className="truncate block max-w-[300px]">{subtopic.description}</span>, sortable: false },
+    { id: "createdAt", header: "Created At", cell: (subtopic: SubTopicDetails) => subtopic.createdAt ? new Date(subtopic.createdAt).toLocaleDateString() : "N/A", sortable: true },
     {
       id: "actions",
       header: "",
-      cell: (subtopic: Subtopic) => (
+      cell: (subtopic: SubTopicDetails) => (
         <div className="flex justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -407,10 +299,10 @@ export default function SubtopicsPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleViewSubtopic(subtopic.id)}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleEdit(subtopic.id)}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleViewSubtopic(subtopic.id!)}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleEdit(subtopic.id!)}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleDeleteClick(subtopic.id)} className="text-destructive focus:text-destructive"><Trash className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDeleteClick(subtopic.id!)} className="text-destructive focus:text-destructive"><Trash className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -470,17 +362,23 @@ export default function SubtopicsPage() {
         defaultSort={getCurrentSortValue()}
         defaultShowFilters={!!topicFilter}
       >
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+        
         <DataTable
-          data={getPaginatedData()}
+          data={subtopics}
           columns={columns}
-          keyExtractor={(item) => item.id}
-          onRowClick={(item) => handleViewSubtopic(item.id)}
+          keyExtractor={(item) => item.id!}
+          onRowClick={(item) => handleViewSubtopic(item.id!)}
           sortColumn={sortColumn}
           sortDirection={sortDirection}
           onSort={handleSort}
           pagination={{
             currentPage,
-            totalPages: Math.max(1, Math.ceil(filteredSubtopics.length / 10)),
+            totalPages,
             onPageChange: handlePageChange
           }}
           emptyState={
@@ -518,7 +416,7 @@ export default function SubtopicsPage() {
             <Select value={currentSubtopic.topicId} onValueChange={(value) => handleFormChange("topicId", value)}>
               <SelectTrigger id="topic"><SelectValue placeholder="Select topic" /></SelectTrigger>
               <SelectContent>
-                {topics.map((topic) => (
+                {getAvailableTopics().map((topic) => (
                   <SelectItem key={topic.id} value={topic.id}>{topic.name}</SelectItem>
                 ))}
               </SelectContent>

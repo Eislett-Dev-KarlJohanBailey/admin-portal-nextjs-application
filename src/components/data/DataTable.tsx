@@ -1,5 +1,5 @@
 
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react"
+import { ReactNode, useCallback, useMemo, useState } from "react"
 import {
   Table,
   TableBody,
@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { cn } from "@/lib/utils"
-import { useRouter } from "next/router"
 
 export interface Column<T> {
   id: string
@@ -55,17 +54,8 @@ export function DataTable<T>({
   rowClassName,
   className
 }: DataTableProps<T>) {
-  const router = useRouter()
   
-  // Initialize pagination from URL
-  useEffect(() => {
-    if (!router.isReady || !pagination) return
-    
-    const pageFromUrl = router.query.page ? parseInt(router.query.page as string, 10) : null
-    if (pageFromUrl && pageFromUrl !== pagination.currentPage && pageFromUrl <= pagination.totalPages) {
-      pagination.onPageChange(pageFromUrl)
-    }
-  }, [router.isReady, router.query, pagination])
+
   
   const handleSort = useCallback((columnId: string) => {
     if (!onSort) return
@@ -73,32 +63,16 @@ export function DataTable<T>({
     const newDirection = 
       sortColumn === columnId && sortDirection === "asc" ? "desc" : "asc"
     
-    // Update URL
-    const query = { 
-      ...router.query, 
-      sortColumn: columnId, 
-      sortDirection: newDirection 
-    }
-    router.push({
-      pathname: router.pathname,
-      query
-    }, undefined, { shallow: true })
-    
+    // Let the parent component handle URL updates
     onSort(columnId, newDirection)
-  }, [onSort, router, sortColumn, sortDirection]);
+  }, [onSort, sortColumn, sortDirection]);
   
   const handlePageChange = useCallback((page: number) => {
     if (!pagination) return
     
-    // Update URL
-    const query = { ...router.query, page: page.toString() }
-    router.push({
-      pathname: router.pathname,
-      query
-    }, undefined, { shallow: true })
-    
+    // Let the parent component handle URL updates
     pagination.onPageChange(page)
-  }, [pagination, router])
+  }, [pagination])
   
   const renderSortIcon = useCallback((columnId: string) => {
     if (sortColumn !== columnId) {
