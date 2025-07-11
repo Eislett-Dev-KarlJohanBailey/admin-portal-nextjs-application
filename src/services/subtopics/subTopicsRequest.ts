@@ -13,12 +13,39 @@ interface returnType {
         total_pages: number;
     };
     error?: string;
-}  
+}
 
-async function handleFetchSubTopics(token : string, page_number: number, page_size: number, topic_id?: string): Promise<returnType> {
+interface SingleSubTopicReturnType {
+    data?: SubTopicDetails;
+    error?: string;
+}
+
+interface UpdateSubTopicData {
+    name: string;
+    description: string;
+    topicId: string;
+    order?: number;
+}
+
+// Interface for single subtopic response from API
+interface SingleSubTopicResponse {
+    data: {
+        id: string;
+        name: string;
+        description: string;
+        topicId?: string; // Made optional since it might be missing from backend
+        order?: number;
+        createdAt?: string;
+        progress?: number;
+        hints?: any[];
+        topicIds?: string[];
+    };
+}
+
+async function handleFetchSubTopics(token : string, page_number: number, page_size: number, topicId?: string): Promise<returnType> {
 
     try {
-        const params: SubTopicReqParams = { page_number, page_size, topic_id: topic_id }
+        const params: SubTopicReqParams = { page_number, page_size, topicId: topicId }
         
         removeNulls(params);
         
@@ -52,4 +79,76 @@ async function handleFetchSubTopics(token : string, page_number: number, page_si
     }
 }
 
-export {handleFetchSubTopics};
+async function handleFetchSubTopic(token: string, subtopicId: string): Promise<SingleSubTopicReturnType> {
+    try {
+        const rawResponse = await fetch(`/api/sub-topics/${subtopicId}`,
+            {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${token}`
+                },
+            }
+        );
+
+        if (!rawResponse.ok) {
+            throw new Error('Failed to fetch subtopic');
+        }
+
+        const response = await rawResponse.json() as SingleSubTopicResponse;
+        return {
+            data: {
+                id: response.data.id,
+                name: response.data.name,
+                description: response.data.description,
+                topicId: response.data.topicId,
+                order: response.data.order,
+                createdAt: response.data.createdAt
+            }
+        };
+    } catch (e) {
+        toast({ title: 'Error fetching subtopic details', style: { background: 'red', color: 'white' }, duration: 3500 })
+        console.log('Subtopic fetch error', e);
+        return { error: 'Failed to fetch subtopic' };
+    }
+}
+
+async function handleUpdateSubTopic(token: string, subtopicId: string, data: UpdateSubTopicData): Promise<SingleSubTopicReturnType> {
+    try {
+        const rawResponse = await fetch(`/api/sub-topics/${subtopicId}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Content-Type': 'application/json',
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(data)
+            }
+        );
+
+        if (!rawResponse.ok) {
+            throw new Error('Failed to update subtopic');
+        }
+
+        const response = await rawResponse.json() as SingleSubTopicResponse;
+        return {
+            data: {
+                id: response.data.id,
+                name: response.data.name,
+                description: response.data.description,
+                topicId: response.data.topicId,
+                order: response.data.order,
+                createdAt: response.data.createdAt
+            }
+        };
+    } catch (e) {
+        toast({ title: 'Error updating subtopic', style: { background: 'red', color: 'white' }, duration: 3500 })
+        console.log('Subtopic update error', e);
+        return { error: 'Failed to update subtopic' };
+    }
+}
+
+export {handleFetchSubTopics, handleFetchSubTopic, handleUpdateSubTopic};
+export type { UpdateSubTopicData };

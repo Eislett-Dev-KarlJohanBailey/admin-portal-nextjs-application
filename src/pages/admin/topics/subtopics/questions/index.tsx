@@ -24,7 +24,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 // import { Question, QuestionType } from "@/lib/types"
-import { useAuth } from "@/contexts/AuthContext";
+import { AuthContext as AuthContextProvider } from "@/contexts/AuthContext";
 import { useDebouncedCallback } from "use-debounce";
 import { useAppDispatch, useAppSelector } from "@/store/hook";
 import {
@@ -65,7 +65,7 @@ import {
 export default function QuestionsPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const authContext = useContext(useAuth());
+  const authContext = useContext(AuthContextProvider);
 
   const questionReqParams = useAppSelector(getQuestionReqParams);
   const totalQuestionAmt = useAppSelector(getQuestionAmt);

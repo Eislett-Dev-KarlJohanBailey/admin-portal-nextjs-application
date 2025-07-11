@@ -3,5 +3,6 @@ export interface SubTopicDetails {
   name: string 
   description: string 
   topicId: string
+  order?: number
   createdAt?: string 
 }

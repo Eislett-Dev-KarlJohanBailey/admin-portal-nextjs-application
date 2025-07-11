@@ -3,12 +3,9 @@ import { useEffect, useState, useCallback, useContext } from "react"
 import { AdminLayout } from "@/components/layout/AdminLayout"
 import { DataManagementLayout } from "@/components/layout/DataManagementLayout"
 import { DataTable } from "@/components/data/DataTable"
-import { DataFormDrawer } from "@/components/data/DataFormDrawer"
 import { DeleteConfirmationDialog } from "@/components/data/DeleteConfirmationDialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Edit, Eye, MoreHorizontal, Trash } from "lucide-react"
 import {
   DropdownMenu,
@@ -26,32 +23,27 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select"
-import { useAuth } from "@/contexts/AuthContext"
+import { AuthContext as AuthContextProvider } from "@/contexts/AuthContext"
 import { handleFetchSubTopics } from "@/services/subtopics/subTopicsRequest"
-import { handleFetchTopic } from "@/services/topics/topicsRequest"
+import { handleFetchTopic, handleFetchAllTopics } from "@/services/topics/topicsRequest"
 import { SubTopicDetails } from "@/models/subTopic/subTopicDetails"
 import { TopicDetails } from "@/services/topics/topicsRequest"
 import { DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE } from "@/constants/tablePageSizes"
+import { toast } from "@/hooks/use-toast"
 
-// Subtopic form type
-interface SubtopicFormData {
-  id?: string
-  name: string
-  description: string
-  topicId: string
-  createdAt?: string
-}
+
 
 export default function SubtopicsPage() {
   const router = useRouter()
-  const authContext = useContext(useAuth())
+  const authContext = useContext(AuthContextProvider)
   const token = authContext?.token
 
   // State for subtopics data
   const [subtopics, setSubtopics] = useState<SubTopicDetails[]>([])
-  const [topics, setTopics] = useState<Map<string, TopicDetails>>(new Map())
+  const [topics, setTopics] = useState<TopicDetails[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [authTimeout, setAuthTimeout] = useState(false)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE_NUMBER)
@@ -65,15 +57,7 @@ export default function SubtopicsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [topicFilter, setTopicFilter] = useState<string>("")
   
-  // Form drawer state
-  const [formDrawerOpen, setFormDrawerOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [currentSubtopic, setCurrentSubtopic] = useState<SubtopicFormData>({
-    name: "",
-    description: "",
-    topicId: ""
-  })
-  const [isEditMode, setIsEditMode] = useState(false)
+
   
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -82,7 +66,10 @@ export default function SubtopicsPage() {
 
   // Fetch subtopics from API
   const fetchSubtopics = useCallback(async () => {
-    if (!token) return
+    if (!token) {
+      console.log('No token available, skipping fetch')
+      return
+    }
 
     setIsLoading(true)
     setError(null)
@@ -110,25 +97,22 @@ export default function SubtopicsPage() {
     }
   }, [token, currentPage, pageSize, topicFilter])
 
-  // Fetch topic details for a given topic ID
-  const fetchTopicDetails = useCallback(async (topicId: string) => {
-    if (!token || topics.has(topicId)) return
+  // Fetch all topics for the dropdown and topic name resolution
+  const fetchAllTopics = useCallback(async () => {
+    if (!token) {
+      console.log('No token available, skipping topics fetch')
+      return
+    }
 
     try {
-      const result = await handleFetchTopic(token, topicId)
+      const result = await handleFetchAllTopics(token, 1, 100)
       if (result.data) {
-        setTopics(prev => new Map(prev).set(topicId, result.data))
+        setTopics(result.data)
       }
     } catch (err) {
-      console.error('Error fetching topic details:', err)
+      console.error('Error fetching topics:', err)
     }
-  }, [token, topics])
-
-  // Fetch topic details for all subtopics
-  const fetchTopicDetailsForSubtopics = useCallback(async () => {
-    const uniqueTopicIds = [...new Set(subtopics.map(subtopic => subtopic.topicId))]
-    await Promise.all(uniqueTopicIds.map(topicId => fetchTopicDetails(topicId)))
-  }, [subtopics, fetchTopicDetails])
+  }, [token])
 
   // Initialize state from URL on first load
   useEffect(() => {
@@ -147,55 +131,62 @@ export default function SubtopicsPage() {
     
     const topicFilterFromUrl = router.query.topic as string
     if (topicFilterFromUrl) setTopicFilter(topicFilterFromUrl)
+    // If no topic filter in URL, set to "all" for UI consistency
+    if (!topicFilterFromUrl && topicFilter === "") {
+      setTopicFilter("")
+    }
   }, [router.isReady, router.query])
+
+  // Debug token availability and handle timeout
+  useEffect(() => {
+    console.log('Token availability changed:', !!token)
+    
+    // Set a timeout for authentication loading
+    const timeout = setTimeout(() => {
+      if (!token) {
+        console.log('Authentication timeout - no token available after 5 seconds')
+        setAuthTimeout(true)
+      }
+    }, 5000)
+    
+    return () => clearTimeout(timeout)
+  }, [token])
+
+  // Track if we've attempted to load data
+  const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false)
 
   // Fetch subtopics when dependencies change
   useEffect(() => {
-    fetchSubtopics()
-  }, [fetchSubtopics])
+    if (token) {
+      console.log('Fetching subtopics with token available')
+      setHasAttemptedLoad(true)
+      fetchSubtopics()
+    }
+  }, [fetchSubtopics, token])
 
-  // Fetch topic details when subtopics change
+  // Fetch topics when component mounts
   useEffect(() => {
-    fetchTopicDetailsForSubtopics()
-  }, [fetchTopicDetailsForSubtopics])
+    if (token) {
+      console.log('Fetching topics with token available')
+      fetchAllTopics()
+    }
+  }, [fetchAllTopics, token])
 
-  const handleFormChange = (field: keyof SubtopicFormData, value: string) => {
-    setCurrentSubtopic(prev => ({ ...prev, [field]: value }))
-  }
+
   
   const handleAddNew = () => {
-    setCurrentSubtopic({
-      name: "",
-      description: "",
-      topicId: router.query.topic as string || ""
+    // TODO: Implement add new subtopic page
+    toast({
+      title: 'Coming Soon',
+      description: 'Add new subtopic functionality will be implemented soon.',
     })
-    setIsEditMode(false)
-    setFormDrawerOpen(true)
   }
   
   const handleEdit = (id: string) => {
-    const subtopicToEdit = subtopics.find(subtopic => subtopic.id === id)
-    if (subtopicToEdit) {
-      setCurrentSubtopic(subtopicToEdit)
-      setIsEditMode(true)
-      setFormDrawerOpen(true)
-    }
+    router.push(`/admin/topics/subtopics/edit/${id}`)
   }
   
-  const handleFormSubmit = () => {
-    setIsSubmitting(true)
-    if (!currentSubtopic.name || !currentSubtopic.topicId) {
-      setIsSubmitting(false)
-      return
-    }
-    
-    // TODO: Implement actual API calls for create/update
-    setTimeout(() => {
-      setIsSubmitting(false)
-      setFormDrawerOpen(false)
-      fetchSubtopics() // Refresh data
-    }, 1000)
-  }
+
   
   const handleDeleteClick = (id: string) => {
     setSubtopicToDelete(id)
@@ -226,10 +217,12 @@ export default function SubtopicsPage() {
   }
   
   const handleTopicFilterChange = (value: string) => {
-    setTopicFilter(value)
+    // Convert "all" to empty string for API calls, but keep "all" for UI state
+    const apiValue = value === "all" ? "" : value
+    setTopicFilter(apiValue)
     setCurrentPage(1)
-    const query = { ...router.query, topic: value || undefined, page: "1" }
-    if (!value) delete query.topic
+    const query = { ...router.query, topic: value === "all" ? undefined : value, page: "1" }
+    if (value === "all") delete query.topic
     router.push({ pathname: router.pathname, query })
   }
   
@@ -251,17 +244,16 @@ export default function SubtopicsPage() {
   }
   
   const getTopicName = (topicId: string) => {
-    const topic = topics.get(topicId)
+    const topic = topics.find(t => t.id === topicId)
     return topic?.name || "N/A"
   }
 
   // Get all available topics for the filter dropdown
   const getAvailableTopics = () => {
-    const topicIds = [...new Set(subtopics.map(subtopic => subtopic.topicId))]
-    return topicIds.map(topicId => ({
-      id: topicId,
-      name: getTopicName(topicId)
-    })).filter(topic => topic.name !== "N/A")
+    return topics.map(topic => ({
+      id: topic.id,
+      name: topic.name
+    }))
   }
   
   const filterOptions = [
@@ -269,11 +261,11 @@ export default function SubtopicsPage() {
       id: "topic",
       label: "Topic",
       type: "select" as const,
-      value: topicFilter,
+      value: topicFilter || "all",
       onChange: handleTopicFilterChange,
       placeholder: "Select topic",
       options: [
-        { label: "All Topics", value: "" },
+        { label: "All Topics", value: "all" },
         ...getAvailableTopics().map(topic => ({ label: topic.name, value: topic.id }))
       ]
     }
@@ -290,19 +282,24 @@ export default function SubtopicsPage() {
       header: "",
       cell: (subtopic: SubTopicDetails) => (
         <div className="flex justify-end">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
+                      <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleViewSubtopic(subtopic.id!)}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleEdit(subtopic.id!)}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleViewSubtopic(subtopic.id!); }}><Eye className="mr-2 h-4 w-4" />View</DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(subtopic.id!); }}><Edit className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleDeleteClick(subtopic.id!)} className="text-destructive focus:text-destructive"><Trash className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteClick(subtopic.id!); }} className="text-destructive focus:text-destructive"><Trash className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -328,6 +325,71 @@ export default function SubtopicsPage() {
 
   const getCurrentSortValue = () => `${sortColumn}_${sortDirection}`
   
+  // Show loading state while token is not available
+  if (!authContext) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Initializing application...</p>
+            <p className="text-sm text-muted-foreground mt-2">Please wait while we set up your environment</p>
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  if (!token) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            {!authTimeout ? (
+              <>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading authentication...</p>
+                <p className="text-sm text-muted-foreground mt-2">Please wait while we verify your session</p>
+                <p className="text-xs text-muted-foreground mt-1">If this takes too long, please try refreshing the page</p>
+              </>
+            ) : (
+              <>
+                <div className="text-red-500 mb-4">
+                  <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <p className="text-red-600 font-medium">Authentication Error</p>
+                <p className="text-sm text-muted-foreground mt-2">Unable to load your authentication session</p>
+                <Button 
+                  onClick={() => window.location.reload()} 
+                  className="mt-4"
+                  variant="outline"
+                >
+                  Refresh Page
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  // Show loading state if we haven't attempted to load data yet
+  if (token && !hasAttemptedLoad && !isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Preparing data...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
+
   return (
     <AdminLayout>
       <DataManagementLayout
@@ -364,7 +426,25 @@ export default function SubtopicsPage() {
       >
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-red-800">{error}</p>
+            <div className="flex items-start space-x-3">
+              <div className="text-red-500 mt-0.5">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-red-800 font-medium">Error loading subtopics</p>
+                <p className="text-red-700 text-sm mt-1">{error}</p>
+                <Button 
+                  onClick={handleRefresh} 
+                  className="mt-2"
+                  size="sm"
+                  variant="outline"
+                >
+                  Try Again
+                </Button>
+              </div>
+            </div>
           </div>
         )}
         
@@ -389,51 +469,6 @@ export default function SubtopicsPage() {
           }
         />
       </DataManagementLayout>
-      
-      <DataFormDrawer
-        title={isEditMode ? "Edit Subtopic" : "Add New Subtopic"}
-        description={isEditMode ? "Update subtopic details" : "Create a new subtopic"}
-        open={formDrawerOpen}
-        onOpenChange={setFormDrawerOpen}
-        onSubmit={handleFormSubmit}
-        isSubmitting={isSubmitting}
-        submitLabel={isEditMode ? "Save Changes" : "Create Subtopic"}
-        size="md"
-      >
-        <div className="space-y-6">
-          {isEditMode && currentSubtopic.id && (
-            <div className="space-y-2">
-              <Label htmlFor="id">ID</Label>
-              <Input id="id" value={currentSubtopic.id} readOnly disabled className="bg-muted" />
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="name">Subtopic Name</Label>
-            <Input id="name" value={currentSubtopic.name} onChange={(e) => handleFormChange("name", e.target.value)} placeholder="Enter subtopic name" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="topic">Topic</Label>
-            <Select value={currentSubtopic.topicId} onValueChange={(value) => handleFormChange("topicId", value)}>
-              <SelectTrigger id="topic"><SelectValue placeholder="Select topic" /></SelectTrigger>
-              <SelectContent>
-                {getAvailableTopics().map((topic) => (
-                  <SelectItem key={topic.id} value={topic.id}>{topic.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea id="description" value={currentSubtopic.description} onChange={(e) => handleFormChange("description", e.target.value)} placeholder="Enter subtopic description" rows={4} />
-          </div>
-          {isEditMode && currentSubtopic.createdAt && (
-            <div className="space-y-2">
-              <Label htmlFor="createdAt">Created At</Label>
-              <Input id="createdAt" value={new Date(currentSubtopic.createdAt).toLocaleDateString()} readOnly disabled className="bg-muted" />
-            </div>
-          )}
-        </div>
-      </DataFormDrawer>
       
       <DeleteConfirmationDialog
         open={deleteDialogOpen}

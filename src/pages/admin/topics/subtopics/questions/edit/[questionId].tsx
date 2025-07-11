@@ -48,12 +48,12 @@ import {
   displaySuccessMessage,
 } from "@/services/displayMessages";
 import { handleFetchQuestionById } from "@/services/questions/questionsRequest";
-import { useAuth } from "@/contexts/AuthContext";
+import { AuthContext as AuthContextProvider } from "@/contexts/AuthContext";
 
 export default function UpdateQuestionPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const authContext = useContext(useAuth());
+  const authContext = useContext(AuthContextProvider);
 
   const formData = useAppSelector(getQuestionFormData);
   const questionSubtopics = useAppSelector(getQuestionFormSubtopics);

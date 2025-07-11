@@ -13,12 +13,12 @@ import { toast } from "@/hooks/use-toast";
 import { AuthResponse } from "@/models/Auth/authResponse";
 import { Toaster } from "@/components/ui/toaster";
 import { useAppDispatch } from "@/store/hook";
-import { useAuth } from "@/contexts/AuthContext";
+import { AuthContext as AuthContextProvider } from "@/contexts/AuthContext";
 
 export default function LoginPage() {
   
   const dispatch = useAppDispatch()
-  const authContext = useContext(useAuth())
+  const authContext = useContext(AuthContextProvider)
 
   const router = useRouter();
   // const [email, setEmail] = useState("");

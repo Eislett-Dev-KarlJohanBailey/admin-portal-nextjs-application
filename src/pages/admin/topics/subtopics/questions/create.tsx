@@ -43,7 +43,7 @@ import {
   displayErrorMessage,
   displaySuccessMessage,
 } from "@/services/displayMessages";
-import { useAuth } from "@/contexts/AuthContext";
+import { AuthContext as AuthContextProvider } from "@/contexts/AuthContext";
 
 // Mock data for demonstration
 const MOCK_SUBTOPICS = [
@@ -88,7 +88,7 @@ const MOCK_SUBTOPICS = [
 export default function CreateQuestionPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const authContext = useContext(useAuth());
+  const authContext = useContext(AuthContextProvider);
 
   const formData = useAppSelector(getQuestionFormData);
   const questionSubtopics = useAppSelector(getQuestionFormSubtopics);
