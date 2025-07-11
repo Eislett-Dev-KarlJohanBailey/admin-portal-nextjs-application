@@ -1,33 +1,75 @@
-import { NextApiRequest, NextApiResponse } from 'next'
+import { HTTP_REQUEST_INTERVAL, HTTP_REQUEST_LIMIT } from "@/constants/rateLimitParams";
+import rateLimit from "@/services/rateLimit";
+import { formatGetReqJson } from "@/services/utils";
+import { NextApiRequest, NextApiResponse } from "next";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'GET') {
-    try {
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
-      const { page_size = 100, page_number = 1 } = req.query
+interface Error {
+  error?: string 
+}
 
-      const url = `${backendUrl}/api/v1/topics?page_size=${page_size}&page_number=${page_number}`
+// Get All Topics
+async function GET(req: NextApiRequest, res: NextApiResponse) {
+  // const isRateLimit = rateLimit(HTTP_REQUEST_LIMIT, HTTP_REQUEST_INTERVAL)
+  // if( !(await isRateLimit(req , res) )){
+  //   return res.status(429).json({ error: 'Too many requests, please try again later.' } );
+  // }
+  
+  console.log('GET /api/topics (App Router)');
 
-      const response = await fetch(url, {
+  const query = req.query; // { page_number: '1', page_size: '5' }
+
+  console.log('query', req.query)
+
+  if (!query?.page_number) {
+    return res.status(400).json({ error: 'Page Number is required' });
+  }
+  else if (!query.page_size) {
+    return res.status(400).json({ error: 'Page Size is required' });
+  }
+
+  try {
+    const route = 'topics';
+    const token = req.headers.authorization;
+    const apiKey = process.env.API_KEY;
+    const nodeServer = process.env.SERVER_BASE_URL;
+
+    const rawResponse = await fetch(
+      `${nodeServer}${route}?${formatGetReqJson(query)}`,
+      {
         method: 'GET',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': req.headers.authorization || '',
+          "Authorization": token
         },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Backend responded with status: ${response.status}`)
       }
+    );
 
-      const data = await response.json()
-      res.status(200).json(data)
-    } catch (error) {
-      console.error('Error fetching topics:', error)
-      res.status(500).json({ error: 'Failed to fetch topics' })
+    if (!rawResponse.ok) {
+      throw new Error('Failed to fetch topics');
     }
-  } else {
-    res.setHeader('Allow', ['GET'])
-    res.status(405).end(`Method ${req.method} Not Allowed`)
+
+    const response = await rawResponse.json()
+
+    // console.log('GET /api/topics (Response):', response);
+    return res.status(200).json(response);
+  } catch (error) {
+    return res.status(500).json({ error: 'Topics GET: ' + error.message });
   }
-} 
+}
+
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === 'GET') 
+    return await GET(req, res)
+  else 
+    return res.status(500).json({ error: 'Invalid request' });
+}
+
+export const config = {
+  api: {
+    responseLimit: false,
+    bodyParser: true, // to parse data
+  },
+}
+
+export default handler; 
