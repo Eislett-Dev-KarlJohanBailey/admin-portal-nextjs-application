@@ -7,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // Forward the request to the backend API
       const backendUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000'
-      const response = await fetch(`${backendUrl}/api/v1/sub-topics/${subTopicId}`, {
+      const response = await fetch(`${backendUrl}sub-topics/${subTopicId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // Forward the request to the backend API
       const backendUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000'
-      const response = await fetch(`${backendUrl}/api/v1/sub-topics/${subTopicId}`, {
+      const response = await fetch(`${backendUrl}sub-topics/${subTopicId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // Forward the request to the backend API
       const backendUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000'
-      const response = await fetch(`${backendUrl}/api/v1/sub-topics/${subTopicId}`, {
+      const response = await fetch(`${backendUrl}sub-topics/${subTopicId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
