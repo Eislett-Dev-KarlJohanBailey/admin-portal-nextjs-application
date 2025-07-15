@@ -6,7 +6,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') {
     try {
       // Forward the request to the backend API
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+      const backendUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000'
       const response = await fetch(`${backendUrl}/api/v1/sub-topics/${subTopicId}`, {
         method: 'GET',
         headers: {
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else if (req.method === 'PUT') {
     try {
       // Forward the request to the backend API
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+      const backendUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000'
       const response = await fetch(`${backendUrl}/api/v1/sub-topics/${subTopicId}`, {
         method: 'PUT',
         headers: {
@@ -51,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else if (req.method === 'DELETE') {
     try {
       // Forward the request to the backend API
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+      const backendUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000'
       const response = await fetch(`${backendUrl}/api/v1/sub-topics/${subTopicId}`, {
         method: 'DELETE',
         headers: {
